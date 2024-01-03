@@ -1,0 +1,119 @@
+---
+title: "Intro to Data Analytics - Final Project - Do Website Media Ratings and Awards Earned indicate the quality of a show?"
+author: "John Salmon"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(GGally)
+```
+## Introduction
+
+  Awards and Ratings for TV shows and Movies are Important metrics. When deciding what to watch or whether or not we want to watch something these are often metrics that run through our heads. For this reason its important that these metrics mean something. In this project I am interested in examining website review scores and information on awards received and nominated for to see how they compare with each other and whether they should be used as valid metrics of quality. 
+
+
+```{r importdata}
+netflix <- read.csv("netflix.csv")
+```
+## Dataset Information
+
+  The netflix.csv file was sourced from Kaggle.com. It contains data from the Netflix website, the Internet Movie Database(IMDb), The user aggregate scoring site Rotten Tomatoes, and scores from MetaCritic. According to the creator many of the data set the movie review website API's were used. I am not sure how the data from netflix was acquired as Netflix does not have an official API.
+  
+The dataset can be found [here](https://www.kaggle.com/datasets/ashishgup/netflix-rotten-tomatoes-metacritic-imd): https://www.kaggle.com/datasets/ashishgup/netflix-rotten-tomatoes-metacritic-imd
+
+```{r cleaning}
+print(c("There are ", sum(is.na(netflix)), " missing values in the netflix dataset."))
+
+print(c("The IMDb column has ", sum(is.na(netflix$Rotten.Tomatoes.Score)), " missing values. Meta Critic has ", sum(is.na(netflix$Metacritic.Score))," missing values."))
+
+netflix <- netflix[!is.na(netflix$Rotten.Tomatoes.Score),]##Adds only columns with data
+netflix <- netflix[!is.na(netflix$Metacritic.Score),]##does the same for 
+netflix <- netflix[!is.na(netflix$IMDb.Score),]
+netflix <- netflix[!duplicated(netflix$Title),]
+
+##and lets replace the NA's for awards earned with zero's 
+netflix[is.na(netflix$Awards.Nominated.For),] <- 0
+netflix[is.na(netflix$Awards.Received),] <- 0
+
+
+
+```
+## Cleaning The Data
+  According to the is.na() of the dataset there are 43,767 missing values in the entire dataset. This looks like a scary number but this project is mainly interested in looking at the Rotten Tomatoes, Meta Critic, and IMDb scores, as well as the Awards Information. Which roughly halves the missing values. These missing values need to be dealt with. The missing data is out of scope to collect and patch into the data set at the moment so for this analysis I am choosing to remove rows with missing data. Duplicate data is slightly different, because we are dealing with scores on a scale there will be duplicate numerical values, but movie titles tend to be more unique and can be identified and removed based on title to account for any cases where a movie was accidently entered into the data set twice.
+
+``` {r summaries}
+summary(netflix)
+```
+```{r Basic Exploratory plots}
+ggplot(netflix, mapping = aes(x = Metacritic.Score, y = Rotten.Tomatoes.Score)) + geom_point(color = "#6A147C")
+ggplot(netflix, mapping = aes(x = Genre, y = Rotten.Tomatoes.Score)) + geom_point(color = "#9B0505")
+ggplot(netflix, mapping = aes(x = Genre, y = Metacritic.Score)) + geom_point(color = "#9B0505")
+
+```
+## Exploratory Plots.
+
+  The first plot looks at Meta Critic Scores compared with Rotten Tomatoes Score. For the most part there seems to be a positive line that would fit the data well meaning that for most points the scores match up. But the interesting points are the ones separate from the main line clustering as those are the points where there is a sizable mismatch between the rotten tomato's scores and Meta Critic scores. We can try a regression equation and examine the coefficient and residuals to see how well the scores fit.
+
+  The second and third lots are looking at respective website scores and genres. Looking at the plots it is difficult to make specific statements about the data because there are so many data points on the graphs, but we can see that generally the Rotten Tomato's scores seem to be much more spread between their 0 to 100 range where as the MetaCritic scores seem to bunch up much closer around the 25 - 75 range per genre.
+
+```{r Lines Of Best Fit}
+cor(netflix$Rotten.Tomatoes.Score, netflix$Awards.Nominated.For)
+ggpairs(netflix[,c(13, 14, 15, 16)])
+Tomatoes_Critic <- lm(Rotten.Tomatoes.Score ~ Metacritic.Score, netflix)
+summary(Tomatoes_Critic)
+```
+## Regression Analysis
+  Fitting a line to that first plot we can get some more in depth insight. The formula for our line is $Y = 1.41221 X - 19.98424$, the multiple r-squared value at $0.9359$ is very close to 1 showing that our line is a pretty good fit for the data.
+```{r line visualization}
+ggplot(netflix, mapping = aes(x = Metacritic.Score, y = Rotten.Tomatoes.Score)) + geom_point(color = "#91106D") + geom_smooth(method="lm",formula=y~x,color='#FF9933')
+```
+  This visualization of our line on our chart seems to match our conclusion based on the multiple r-squared value. This shows that for the most part the scores of the rotten tomatoes and metacritic websites seem to match pretty well for the most part. An interesting future project could be to look at the obvious outliers that sit far away from the line and potentially identify what is creating such a mismatch.
+```{r morelines}
+Tomatoes_IMDb <- lm(Rotten.Tomatoes.Score ~ IMDb.Score, netflix)
+
+IMDb_Critic <- lm(IMDb.Score ~ Metacritic.Score, netflix)
+
+summary(Tomatoes_IMDb)
+summary(IMDb_Critic)
+ggplot(netflix, mapping = aes(x = Metacritic.Score, y = IMDb.Score)) + geom_point(color = "#91106D") + geom_smooth(method="lm",formula=y~x,color='#FF9933')
+ggplot(netflix, mapping = aes(x = Rotten.Tomatoes.Score, y = IMDb.Score)) + geom_point(color = "#91106D") + geom_smooth(method="lm",formula=y~x,color='#FF9933')
+```
+  Examining the relationships between the scores of other aggregate review websites gets a bit more interesting. Based on the charts above, we can see that the relationship between MetaCritic and IMDb and IMDb and Rotten Tomatoes is not quite as strong with multiple r squared values of $0.8983$ and $0.8196$ respectively. This means that there is a slight mismatch mismatch between the scores of the previous two sites and IMDb's scores in some cases.
+  
+```{r AwardsandScores1}
+
+scores_awardsEarned <- lm(Awards.Received ~ Metacritic.Score+Rotten.Tomatoes.Score+IMDb.Score, netflix)
+scores_awardsNominated <- lm(Awards.Nominated.For ~ Metacritic.Score+Rotten.Tomatoes.Score+IMDb.Score, netflix)
+
+```
+## Awards and Scores
+  We have established that Rotten Tomatoes, Metacritic, and to a slightly lesser extent IMDb seem to agree on the quality of shows based on the scores shown on their websites. These websites can serve as a window into what the average viewer thinks of a show. To get the opinions of the professional viewers we will examine the number of awards nominated for and rewards received for the shows.
+  
+```{r Awards and Scores2 Summary LMs}
+par(mfrow=c(1,1))
+summary(scores_awardsEarned) 
+summary(scores_awardsNominated)
+
+par(mfrow=c(2,2))
+plot(scores_awardsEarned)
+plot(scores_awardsNominated)
+par(mfrow=c(1,1))
+```
+  Based on these R scores: $0.2705$ for website ratings and awards received as well as $0.2313$ for website ratings and awards nominated for. These mean that website ratings are not accurate predictors for how many awards a show will earn/be nominated for. The four graphs and especially the residuals vs fitted graphs illustrate this pretty well. We can see that at the lower end of the fitted values there aren't that many residuals while at the higher levels the residuals grow. In other words, it seems that there is a disconnect in opinions between internet reviewers and Award Board Members. 
+  
+
+##Conclusion
+
+#What does the analysis say?
+  To sum up, IMDb, Rotten Tomatoes, and Meta Critic scores tend to match up pretty well. Meta Critic and Rotten Tomatoes especially, seem to have corollary scores meaning a score on one website will have a likelyhood of sharing a similar score on the other. Factoring in IMDb's scores and there is not as strong of a relation ship, but there still seems to be one present. While there is not enough information to concretely explain the difference it could possibly be attributed to a difference in scales for scoring used on each website. Experimentation and more analysis would be needed to say for certain. 
+
+  While the websites scores seem to agree in most cases, looking at the website scores and their relationship with the awards a show or movie has been nominated for or received there is a larger mismatch. The aggregate scores from the websites are not very good predictors of whether or not a show or movie will be nominated for or earn any awards. This seems to suggest that the opinions on the shows and movies of the people giving the awards do not match those of the users of the website. It could be that the ammount of awards given is so low that they just cant possibly match the ratings of the websites. Not every highly rated show gets an award simply because there aren't enough unique awards to give. This is also not something that can be concretely concluded with the analytics in this project. However, it certainly would be an interesting project in the future to examine these trends and even the media with awards to see what makes an award winning show.
+  
+#Applications and Future Projects
+  User review data and award information are important potential indicators of a show or movies quality. It would be interesting to collect survey data and see how that matches the websites and award data as well. A long term project would be training a model on collected data to recommend shows based on a general public opinion, critic opinion, and other factors. Personalizing this model so that it recommends things tailored to my tastes would be especially interesting. It would also be interesting to examine award data specifically and compare things like genre, production budget, cast, and other factors to determine whether there is any bias in which shows and movies receive awards. This analysis and the future analysis would also have similar applications and maybe similar results in the music field and could be interesting to explore as well.
+  
